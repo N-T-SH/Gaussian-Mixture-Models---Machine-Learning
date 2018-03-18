@@ -20,10 +20,49 @@ import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
 
+noMoves = 0
+moves = 0
+surprises = 0
+i = 0
 
-def estimateMeanConvergence(move, i, my_centers, agentR, agentB, max_iter, gmm = None, ks_df_OLD = None, X_old = None):
+# Set initial values
+random.seed(1)
+max_iter = 100
+# Nitesh - Should we randomise this?
+agentR = (-25, -25) # initial location of agentR
+agentB = (25, -25) # initial location of agentB
+my_centers = ((-5, -5),(5, 5))
+gmm = None
+ks_df_OLD = None
+X_old = None
+
+def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe):
     # move distributions?
-#     move = random.randint(0, 1)
+    global noMoves
+    global moves
+    global surprises
+    global i
+    global my_centers
+    global agentR
+    global agentB
+    global max_iter
+    global gmm
+    global ks_df_OLD
+    global X_old
+    
+    if noMoveClick>noMoves:
+        move = 0
+        noMoves = noMoveClick
+    elif moveClick>moves:
+        move = 1
+        moves = moveClick
+    elif surpriseMe>surprises:
+        move = random.randint(0, 1)
+        surprises = surpriseMe
+    else:
+        print("Button press not detected")
+        move = 0
+    
     print(f"Did actually move? {(lambda move:'YES' if move == 1 else 'NO')(move)}")
     my_centers = ((my_centers[0][0] + 1*move, my_centers[0][1] + 4*move),
                   (my_centers[1][0] - 3*move, my_centers[1][1] - 1*move))
@@ -44,16 +83,16 @@ def estimateMeanConvergence(move, i, my_centers, agentR, agentB, max_iter, gmm =
         # extract predicted labels
         labels = gmm.predict(X)
         ks_df = pd.DataFrame(np.column_stack((X, labels)))
-        
-        print(ks_2samp(ks_df[ks_df[2] == 1][0], ks_df_OLD[ks_df_OLD[2] == 1][0])) # TEMP
+        ks_df.columns=['x1', 'x2', 'labels']
+        print(ks_2samp(ks_df[ks_df['labels'] == 1]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x1'])) # TEMP
         
         # if estimated underlying distributions have not changed, stack data.
         #
         # note: assumes independence of x and y (i.e. uses univariate ks test)
-        if ks_2samp(ks_df[ks_df[2] == 1][0], ks_df_OLD[ks_df_OLD[2] == 1][0])[1] > .99 and\
-            ks_2samp(ks_df[ks_df[2] == 1][1], ks_df_OLD[ks_df_OLD[2] == 1][1])[1] > .99 and\
-            ks_2samp(ks_df[ks_df[2] == 0][0], ks_df_OLD[ks_df_OLD[2] == 0][0])[1] > .99 and\
-            ks_2samp(ks_df[ks_df[2] == 0][0], ks_df_OLD[ks_df_OLD[2] == 0][0])[1] > .99:
+        if ks_2samp(ks_df[ks_df['labels'] == 1]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x1'])[1] > .99 and\
+            ks_2samp(ks_df[ks_df['labels'] == 1]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x2'])[1] > .99 and\
+            ks_2samp(ks_df[ks_df['labels'] == 0]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x1'])[1] > .99 and\
+            ks_2samp(ks_df[ks_df['labels'] == 0]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x2'])[1] > .99:
                 # stack observations
                 X = np.vstack((X_old, X)) 
         
@@ -66,7 +105,7 @@ def estimateMeanConvergence(move, i, my_centers, agentR, agentB, max_iter, gmm =
     
     # create ks df for next iteration
     ks_df_OLD = pd.DataFrame(np.column_stack((X, labels)))
-
+    ks_df_OLD.columns=['x1', 'x2', 'labels']
     
     # update target means for agents to seek
     B_mean_estimate, R_mean_estimate = tuple(gmm.means_[0]), tuple(gmm.means_[1])
@@ -95,21 +134,10 @@ def estimateMeanConvergence(move, i, my_centers, agentR, agentB, max_iter, gmm =
     agentB = agentB[0] + scaleB * distanceB * math.cos(angle_degreeB * math.pi / 180),\
              agentB[1] + scaleB * distanceB * math.sin(angle_degreeB * math.pi / 180)
     
-# Replaced with plotly graphs
-    # Plot points, assigning GMM labels as colors
-#    fig = plt.figure(figsize=(9, 9))
-#    plt.axis([-20, 20, -20, 20])
-#    plt.scatter(X[:, 0], X[:, 1], c=labels, s=24, cmap='jet')
-#    
-#    # add updated points to plot
-#    plt.plot(agentR[0], agentR[1], marker='s', linestyle='-', color='y') 
-#    plt.plot(agentB[0], agentB[1], marker='s', linestyle='-', color='g') 
-    
     # make data copy for next iteration
     X_old = np.copy(X) 
     #Increment Counter
     i+=1
-    return gmm, ks_df_OLD, X_old, i, agentR, agentB
 
 def plotData(ks_df_OLD, agentR, agentB):
     # Function that, given the distribution dataframe, and the agents
@@ -182,15 +210,6 @@ def plotData(ks_df_OLD, agentR, agentB):
     fig = dict(data=data, layout=layout)
     return fig
 
-# Set initial values
-random.seed(1)
-max_iter = 100
-# Nitesh - Should we randomise this?
-agentR = (-25, -25) # initial location of agentR
-agentB = (25, -25) # initial location of agentB
-my_centers = ((-5, -5),(5, 5))
-i = 0
-
 
 # Invoking Dash app
 app = dash.Dash()
@@ -200,24 +219,21 @@ app.layout = html.Div([
         id='GMM with Agent Model'
     ),
     html.Button(id='no-move', n_clicks=0, children='Same Distribution'),
-    html.Button(id='move', n_clicks=0, children='DIfferent Distribution')
+    html.Button(id='move', n_clicks=0, children='Different Distribution'),
+    html.Button(id='surprise-move', n_clicks=0, children='I\'m Feeling Lucky!')
 ])
     
 @app.callback(
     dash.dependencies.Output('GMM with Agent Model', 'figure'),
     [dash.dependencies.Input('no-move', 'n_clicks'),
-     dash.dependencies.Input('move', 'n_clicks')]
+     dash.dependencies.Input('move', 'n_clicks'),
+     dash.dependencies.Input('surprise-move', 'n_clicks')]
 )
-def generateData(no_move_click, move_click):
+def generateData(noMoveClick, moveClick, surpriseMe):
     # First Run
-    #move = 0
-    if (no_move_click == 0) & (move_click == 0):
-        gmm, ks_df_OLD, X_old, i, agentR, agentB = estimateMeanConvergence(move, i, my_centers, agentR, agentB, max_iter)
-    else:
-        gmm, ks_df_OLD, X_old, i, agentR, agentB = estimateMeanConvergence(move, i, my_centers, agentR, agentB, max_iter, gmm, ks_df_OLD, X_old)
-
+    print(noMoveClick, moveClick, surpriseMe)
+    estimateMeanConvergence(noMoveClick, moveClick, surpriseMe)
     # Rename dataframe columns
-    ks_df_OLD.columns=['x1', 'x2', 'labels']
     return plotData(ks_df_OLD, agentR, agentB)
 
 if __name__ == '__main__':
