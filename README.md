@@ -9,7 +9,8 @@ Things to be Added
 - Input for the scale
 - Drop the initial agents?
 
-For the threshold
+For the report
+- Lit Review
 - Future work
 	- Threshold for triggering new distribution
 		Since we use the example of locating adversarial agents, we want to use a threshold at which the agent can react knowing that it will trigger a new distribution.
