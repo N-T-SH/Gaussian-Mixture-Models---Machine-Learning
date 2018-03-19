@@ -44,6 +44,7 @@ my_centers = ((-5, -5),(5, 5))
 gmm = None
 ks_df_OLD = None
 X_old = None
+Y_old = None
 
 # Function to calculate GMM and find the new location of the agents using a predetermined scaling factor 
 def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe, noOfResets, alpha, noOfSamples):
@@ -60,6 +61,7 @@ def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe, noOfResets, alph
     global gmm
     global ks_df_OLD
     global X_old
+    global Y_old
     # indicator to check if KS statistic needs to be run
     runKS = 0
     # indicator to check if same distn. is selected
@@ -80,6 +82,8 @@ def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe, noOfResets, alph
         gmm = None
         ks_df_OLD = None
         X_old = None
+        Y_old = None
+        
     
     # Detect which button was pressed and generate data accordingly
     if noMoveClick>noMoves:
@@ -96,6 +100,7 @@ def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe, noOfResets, alph
     else:
         print("Button press not detected. Assuming same distribution")
         move = 0
+        sameDist = 1
     print("iteration: %d"%i)
     # assign center of distributions
     my_centers = ((my_centers[0][0] + 1*move, my_centers[0][1] + 4*move),
@@ -115,24 +120,38 @@ def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe, noOfResets, alph
                           max_iter=max_iter).fit(X)
         # extract predicted labels
         labels = gmm.predict(X)
-        ks_df = pd.DataFrame(np.column_stack((X, labels)))
-        ks_df.columns=['x1', 'x2', 'labels']
+        ks_df = pd.DataFrame(np.column_stack((X, labels, y_true)))
+        ks_df.columns=['x1', 'x2', 'labels','true_labels']
         
         # if unknown is selected and if estimated underlying distributions have not changed, stack data.
         #
         # note: assumes independence of x and y (i.e. uses univariate ks test)
         if runKS == 1:
+            print("Random Distribution:%d"%move)
+            print(ks_2samp(ks_df[ks_df['labels'] == 1]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x1'])[1],\
+            ks_2samp(ks_df[ks_df['labels'] == 1]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x2'])[1],\
+            ks_2samp(ks_df[ks_df['labels'] == 0]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x1'])[1],\
+            ks_2samp(ks_df[ks_df['labels'] == 0]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x2'])[1])
             if ks_2samp(ks_df[ks_df['labels'] == 1]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x1'])[1] > .99 and\
                 ks_2samp(ks_df[ks_df['labels'] == 1]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x2'])[1] > .99 and\
                 ks_2samp(ks_df[ks_df['labels'] == 0]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x1'])[1] > .99 and\
                 ks_2samp(ks_df[ks_df['labels'] == 0]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x2'])[1] > .99:
                     # stack observations
-                    X = np.vstack((X_old, X)) 
+                    print("Same Distribution: KS")
+                    X = np.vstack((X_old, X))
+                    y_true = np.concatenate((Y_old, y_true), axis = 0)
+#                    y_true = y_true.flatten()
         # if same distribution is selected stack data
         if sameDist == 1:
             # stack observations
-            X = np.vstack((X_old, X)) 
-            
+            print("Same Distribution: Button")
+            print(ks_2samp(ks_df[ks_df['labels'] == 1]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x1'])[1],\
+            ks_2samp(ks_df[ks_df['labels'] == 1]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 1]['x2'])[1],\
+            ks_2samp(ks_df[ks_df['labels'] == 0]['x1'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x1'])[1],\
+            ks_2samp(ks_df[ks_df['labels'] == 0]['x2'], ks_df_OLD[ks_df_OLD['labels'] == 0]['x2'])[1])
+            X = np.vstack((X_old, X))
+            y_true = np.concatenate((Y_old, y_true), axis = 0)
+#            y_true = y_true.flatten()
     # fit GMM
     gmm = GaussianMixture(n_components=2, init_params='kmeans',
                           max_iter=max_iter).fit(X)
@@ -141,8 +160,8 @@ def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe, noOfResets, alph
     labels = gmm.predict(X)
     
     # create ks df for next iteration
-    ks_df_OLD = pd.DataFrame(np.column_stack((X, labels)))
-    ks_df_OLD.columns=['x1', 'x2', 'labels']
+    ks_df_OLD = pd.DataFrame(np.column_stack((X, labels, y_true)))
+    ks_df_OLD.columns=['x1', 'x2', 'labels','true_labels']
     
     # update target means for agents to seek
     B_mean_estimate, R_mean_estimate = tuple(gmm.means_[0]), tuple(gmm.means_[1])
@@ -173,7 +192,9 @@ def estimateMeanConvergence(noMoveClick, moveClick, surpriseMe, noOfResets, alph
              agentB[1] + scaleB * distanceB * math.sin(angle_degreeB * math.pi / 180)
     
     # make data copy for next iteration
-    X_old = np.copy(X) 
+    X_old = np.copy(X)
+    Y_old = np.copy(y_true)
+    
     #Increment Counter
     i+=1
 
@@ -184,7 +205,6 @@ def plotData(ks_df_OLD, agentR, agentB):
     dataRPlot = go.Scatter(
         x=ks_df_OLD[ks_df_OLD['labels'] == 0]['x1'],
         y=ks_df_OLD[ks_df_OLD['labels'] == 0]['x2'],
-        #text=df[df['continent'] == i]['country'],
         mode='markers',
         opacity=0.7,
         marker={
@@ -269,7 +289,7 @@ app.layout = html.Div([
         max=1,
         value=0.5,
         step=0.1,
-        marks = {n:n for n in np.arange(0.0, 1.0, 0.1)}
+        marks = {0:'0', 0.5:'0.5', 1:'1'}
     )
 ])
     
